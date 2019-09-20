@@ -1,0 +1,461 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Navigation Control Options - Azure Maps Web SDK Samples</title>
+
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="This sample shows all the map navigation controls on the map and how they react with different option settings." />
+    <meta name="keywords" content="maps, map, API, SDK, GIS, navigation controls, pan, zoom, pitch, tilt, rotate, satellite, aerial, imagery" />
+    <meta name="author" content="Microsoft Azure Maps" />
+
+    <!-- Add references to the Azure Maps Map control JavaScript and CSS files. -->
+    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.css" type="text/css" />
+    <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.js"></script>
+    <!-- Add a reference to the Azure Maps Services Module JavaScript file. -->
+     <script src="https://atlas.microsoft.com/sdk/javascript/service/2/atlas-service.min.js"></script>
+
+    <script type='text/javascript'>
+        var map, controls = [];
+        var datasource, datasource_search;
+        datasource = new atlas.source.DataSource();
+        datasource_search = new atlas.source.DataSource();
+        function GetMap() {
+            //Initialize a map instance.
+            map = new atlas.Map("myMap", {
+                center: [-122.665, 48.416],
+                zoom: 7,
+                enableAccessibility: true,
+                view: 'Auto',	
+				//Add your Azure Maps subscription key to the map SDK. Get an Azure Maps key at https://azure.com/maps
+                authOptions: {
+                    authType: 'subscriptionKey',
+                    subscriptionKey: 'Q-t5uoLpZW2JGY9jh51nJkCzvMtSra48d25TrsY3g2Y'
+                }
+            });
+            //Add control menu
+            map.events.add('ready', addControls);
+            //Add place of interest option
+            //map.events.add('ready', placeInterest);
+        }
+
+        function placeInterest() {
+            //Create a data source and add it to the map.
+            datasource = new atlas.source.DataSource();
+            map.sources.add(datasource);
+            //Add a layer for rendering point data.
+            var resultLayer = new atlas.layer.SymbolLayer(datasource, null, {
+                iconOptions: {
+                    image: 'pin-round-red',
+                    anchor: 'center',
+                    allowOverlap: true
+                },
+                textOptions: {
+                    anchor: "top"
+                }
+            });
+            map.layers.add(resultLayer);
+            // Use SubscriptionKeyCredential with a subscription key
+            var subscriptionKeyCredential = new atlas.service.SubscriptionKeyCredential(atlas.getSubscriptionKey());
+            var pipeline = atlas.service.MapsURL.newPipeline(subscriptionKeyCredential);
+            var searchURL = new atlas.service.SearchURL(pipeline);
+            // Search tourist attractions in both vancouver and seattle
+            var query =  'tourist attractions';
+            var radius = 10000;
+            var lat_sea = 47.6062;
+            var lon_sea = -122.3321;
+            var lat_van = 49.2827;
+            var lon_van = -123.1207;
+            searchURL.searchPOI(atlas.service.Aborter.timeout(10000), query, {
+                limit: 100,
+                lat: lat_sea,
+                lon: lon_sea,
+                radius: radius
+            }).then((results) => {
+                // Extract GeoJSON feature collection from the response and add it to the datasource
+                var data = results.geojson.getFeatures();
+                datasource.add(data);
+                // set camera to bounds to show the results
+                map.setCamera({
+                    center: [(lon_van + lon_sea)/2, (lat_van + lat_sea)/2],
+                    zoom: 7.5
+                });
+            });
+            searchURL.searchPOI(atlas.service.Aborter.timeout(10000), query, {
+                limit: 100,
+                lat: lat_van,
+                lon: lon_van,
+                radius: radius
+            }).then((results) => {
+                // Extract GeoJSON feature collection from the response and add it to the datasource
+                var data_van = results.geojson.getFeatures();
+                datasource.add(data_van);
+            });
+            //Create a popup but leave it closed so we can update it and display it later.
+            popup = new atlas.Popup();
+            //Add a mouse over event to the result layer and display a popup when this event fires.
+            map.events.add('mouseover', resultLayer, showPopup);
+
+        }
+
+        function showPopup(e) {
+            //Get the properties and coordinates of the first shape that the event occured on.
+            var p = e.shapes[0].getProperties();
+            var position = e.shapes[0].getCoordinates();
+            //Create HTML from properties of the selected result.
+            var html = ['<div style="padding:5px"><div><b>', p.poi.name,
+                '</b></div><div>', p.address.freeformAddress,
+                '</div><div>', position[1], ', ', position[0], '</div></div>'];
+            //Update the content and position of the popup.
+            popup.setPopupOptions({
+                content: html.join(''),
+                position: position
+            });
+            //Open the popup.
+            popup.open(map);
+        }
+
+        function addControls() {
+            //Remove all controls on the map.
+            map.controls.remove(controls);
+            controls = [];
+            //Create a zoom control.
+            controls.push(new atlas.control.ZoomControl({
+                zoomDelta: 1,
+                style: 'light'
+            }));
+            //Create a pitch control and add it to the map.
+            controls.push(new atlas.control.PitchControl({
+                pitchDegreesDelta: 15,
+                style: 'light'
+            }));
+            //Create a compass control and add it to the map.
+            controls.push(new atlas.control.CompassControl({
+                rotationDegreesDelta: 20,
+                style: 'light'
+            }));
+            //Create a style control and add it to the map.
+            controls.push(new atlas.control.StyleControl({
+                mapStyles: ['road',  'night', 'satellite_road_labels']
+            }));
+            //Add controls to the map.
+            map.controls.add(controls, {
+                position: 'top-left'
+            });
+
+            // Add context menu
+            var contextMenuHtml = [
+                '<ul class="contextMenu">',
+                '<li onclick="setStyle(event, \'road\');">Road</li>',
+                '<li onclick="setStyle(event, \'satellite_road_labels\');">Satellite</li>',
+                '<li onclick="changeZoom(event, 1);">Zoom In</li>',
+                '<li onclick="changeZoom(event, -1);">Zoom Out</li>',
+                '</ul>'
+            ];
+            //Create a context menu using a popup.
+            contextMenu = new atlas.Popup({
+                position: [0, 0],
+                //Set content of the popup with HTML for the context menu.
+                content: contextMenuHtml.join('')
+            });
+            //Add a right click event to the map.
+            map.events.add('contextmenu', function (e) {
+                //Update the position of the popup context menu with the mouse position.
+                contextMenu.setOptions({                        
+                    position: e.position
+                });
+                //Open the popup context menu.
+                contextMenu.open(map);
+            });
+            //Close the context menu if the user presses the mouse up anywhere else on the screen.
+            document.body.onmouseup = function () {
+                contextMenu.close();
+            };
+        }
+
+        function clearMarker() {
+            // datasource.clear();
+            // datasource_search.clear();
+            map.clear();
+            GetMap();
+        }
+
+        function searchRoute() {
+            var departure_city = getSelectValue('departure_city_dd');
+            var travel_mode = getSelectValue('travel_mode_dd');
+            var border_crossing = parseFloat(getSelectValue('border_crossing_dd'));
+            var crossing;
+            var check = false;
+
+            //Create a data source and add it to the map.
+            datasource_search = new atlas.source.DataSource();
+            map.sources.add(datasource_search);
+            //Add a layer for rendering the route lines and have it render under the map labels.
+            map.layers.add(new atlas.layer.LineLayer(datasource_search, null, {
+                strokeColor: ['get', 'strokeColor'],
+                // strokeWidth: ['get', 'strokeWidth'],
+                strokeWidth: 4,
+                lineJoin: 'round',
+                lineCap: 'round'
+            }), 'labels');
+            //Add a layer for rendering point data.
+            map.layers.add(new atlas.layer.SymbolLayer(datasource_search, null, {
+                iconOptions: {
+                    image: ['get', 'icon'],
+                    allowOverlap: true
+                },
+                textOptions: {
+                    textField: ['get', 'title'],
+                    offset: [0, 1.2]
+                },
+                filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']] //Only render Point or MultiPoints in this layer.
+            }));
+
+            //Create the GeoJSON objects which represent the start and end point of the route.
+            switch (border_crossing){
+                case 1:
+                    crossing = new atlas.data.Feature(new atlas.data.Point([-122.823510, 49.104600]));
+                    check = true;
+                    break;
+                case 2:
+                    crossing = new atlas.data.Feature(new atlas.data.Point([-122.485470, 49.002100]));
+                    check = true;
+                    break;
+                case 3:
+                    crossing = new atlas.data.Feature(new atlas.data.Point([-122.265053, 49.002541]));
+                    check = true;
+                    break;
+            }
+            if (departure_city == "Vancouver"){
+                var startPoint = new atlas.data.Feature(new atlas.data.Point([-123.1207, 49.2827]), {
+                title: "Vancouver",
+                icon: "pin-red"
+                });
+                var endPoint = new atlas.data.Feature(new atlas.data.Point([-122.3708, 47.6074]), {
+                    title: "Seattle",
+                    icon: "pin-round-red"
+                });
+            }
+            else{
+                var startPoint = new atlas.data.Feature(new atlas.data.Point([-122.3708, 47.6074]), {
+                title: "Seattle",
+                icon: "pin-red"
+                });
+                var endPoint = new atlas.data.Feature(new atlas.data.Point([-123.1207, 49.2827]), {
+                    title: "Vancouver",
+                    icon: "pin-round-red"
+                });
+            }
+            //Add the data to the data source.
+            datasource_search.add([startPoint, endPoint]);
+            //Fit the map window to the bounding box defined by the start and end positions.
+            map.setCamera({
+                bounds: atlas.data.BoundingBox.fromData([startPoint, endPoint]),
+                padding: 75
+            });
+
+            // Use SubscriptionKeyCredential with a subscription key
+            var subscriptionKeyCredential = new atlas.service.SubscriptionKeyCredential(atlas.getSubscriptionKey());
+            // Use subscriptionKeyCredential to create a pipeline
+            var pipeline = atlas.service.MapsURL.newPipeline(subscriptionKeyCredential);
+            // Construct the RouteURL object
+            var routeURL = new atlas.service.RouteURL(pipeline);
+
+            //Start to crossing
+            var coordinates_sc = [[startPoint.geometry.coordinates[0], startPoint.geometry.coordinates[1]], [crossing.geometry.coordinates[0], crossing.geometry.coordinates[1]]];
+            //Make a search route request for a car vehicle type
+            routeURL.calculateRouteDirections(atlas.service.Aborter.timeout(10000), coordinates_sc, {
+                travelMode: travel_mode
+            }).then((directions) => {
+                //Get data features from response
+                var data = directions.geojson.getFeatures();
+                //Get the route line and add some style properties to it.  
+                var routeLine = data.features[0];
+                routeLine.properties.strokeColor = '#2272B9';
+                datasource_search.add(routeLine, 0);
+            });
+            //Crossing to end
+            var coordinates_ce = [[crossing.geometry.coordinates[0], crossing.geometry.coordinates[1]], [endPoint.geometry.coordinates[0], endPoint.geometry.coordinates[1]]];
+            //Make a search route request for a car vehicle type
+            routeURL.calculateRouteDirections(atlas.service.Aborter.timeout(10000), coordinates_ce, {
+                travelMode: travel_mode
+            }).then((directions) => {
+                //Get data features from response
+                var data = directions.geojson.getFeatures();
+                //Get the route line and add some style properties to it.  
+                var routeLine = data.features[0];
+                routeLine.properties.strokeColor = '#2272B9';
+                datasource_search.add(routeLine, 1);
+            });
+        }
+
+        function getSelectValue(id) {
+            var elm = document.getElementById(id);
+            return elm.options[elm.selectedIndex].value;
+        }
+
+    </script>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        .sidePanel {
+            width: 350px;
+            height: 580px;
+            float: left;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        #myMap {
+            position: relative;
+            width: calc(100% - 360px);
+            min-width:290px;
+            height: 800px;
+            float: left;
+        }
+        .contextMenu {
+            border: 1px solid gray;
+            min-width: 125px;
+            list-style: none;
+            display: block;
+            list-style-position: outside;
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+        }
+        .contextMenu li {
+            cursor: pointer;
+            display: block;
+            padding: 6px 12px;
+        }
+            .contextMenu li:focus, .contextMenu li:hover {
+                background-color: rgba(0,0,0,.05);
+            }
+        .contextMenu a,
+        .contextMenu a:hover,
+        .contextMenu a:focus,
+        .contextMenu a:active {
+            text-decoration: none;
+            color: black;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body onload="GetMap()">
+        <div class="sidePanel">
+        <fieldset style="width:320px;margin-bottom:10px;">
+            <legend>Vancouver and Seattle tourists guide map</legend>
+            This is a customized map for people who want to travel between Vancouver and Seattle to find the most suitable route. <br /><br />
+            Configurations in this map include: <br /> 
+            1. Your travel mode. <br /> 
+            2. Your departure time. <br /> 
+            3. Your desired border crosssing <br /> <br /> 
+            Bon voyage! <br /> 
+        </fieldset>
+
+        <h3>Travel Options</h3>
+
+        <table>
+            <tr title="Your departure city">
+                <td>Your departure city</td>
+                <td>
+                    <select id="departure_city_dd">
+                        <option selected="selected" value="Vancouver">Vancouver</option>
+                        <option value="Seattle">Seattle</option>
+                    </select>
+                </td>
+            </tr>
+            <tr title="Choose the travel mode.">
+                <td>Your travel mode</td>
+                <td>
+                    <select id="travel_mode_dd">
+                        <option selected="selected" value="car">car</option>
+                        <option value="bus">bus</option>
+                        <option value="airplane">airplane</option>
+                        <option value="seaplane">seaplane</option>
+                        <option value="ferry">ferry</option>
+                    </select>
+                </td>
+            </tr>
+            <tr title="Depature time in terms of week.">
+                <td>Your departure time</td>
+                <td>
+                    <input type="checkbox" name="weekend" value="weekend" checked> Travel on weekend<br>
+                    <input type="checkbox" name="weekday" value="weekday"> Travel on weekday<br>
+                    <input type="checkbox" name="daytime" value="daytime" checked> Travel in daytime<br> &nbsp&nbsp&nbsp&nbsp&nbsp (before 6:00 pm) <br>
+                    <input type="checkbox" name="night" value="night"> Travel at night <br> &nbsp&nbsp&nbsp&nbsp&nbsp (after 6:00 pm) <br>
+                </td>
+            </tr>
+            <tr title="Desired border crossing.">
+                <td>Your desired border crossing</td>
+                <td>
+                    <select id="border_crossing_dd">
+                        <option selected="selected" value=1>The Peace Arch Crossing</option>
+                        <option value=2>Lynden Crossing</option>
+                        <option value=3>Abbotsford Crossing</option>
+                    </select>
+                </td>
+            </tr>
+<!--             <tr title="The angle that the map will tilt with each click of the control.">
+                <td>Pitch Delta:</td>
+                <td>
+                    <select id="pitchControlDelta" onchange="addControls()">
+                        <option>5</option>
+                        <option selected="selected">10</option>
+                        <option>15</option>
+                        <option>20</option>
+                        <option>25</option>
+                        <option>30</option>
+                        <option>35</option>
+                        <option>40</option>
+                        <option>45</option>
+                    </select>
+                </td>
+            </tr>
+            <tr title="The angle that the map will rotate with each click of the control.">
+                <td>Compass Rotation Delta:</td>
+                <td>
+                    <select id="compassControlRotationDelta" onchange="addControls()">
+                        <option>5</option>
+                        <option>10</option>
+                        <option selected="selected">15</option>
+                        <option>20</option>
+                        <option>25</option>
+                        <option>30</option>
+                        <option>35</option>
+                        <option>40</option>
+                        <option>45</option>
+                    </select>
+                </td>
+            </tr> -->
+            <tr title="Search your customized route">
+                <td>Search your customized route</td>
+                <td>
+                    <button id="route_b" onclick="searchRoute()">Search route</button>
+                </td>
+            </tr>
+            <tr title="Search places of interest">
+                <td>Search places of interest</td>
+                <td>
+                    <button id="interest_b" onclick="placeInterest()">Search attractions</button>
+                </td>
+            </tr>
+            <tr title="Clear all markers">
+                <td>Clear all markers</td>
+                <td>
+                    <button id="clear_b" onclick="clearMarker()">Clear all</button>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="myMap"></div>
+
+</body>
+</html>
